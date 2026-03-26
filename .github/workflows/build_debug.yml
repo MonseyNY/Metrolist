@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build Release APK
 
 on:
   workflow_dispatch:
@@ -29,29 +29,39 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Generate debug.keystore if not exists
+      - name: Generate signing keystore
         run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkey -v \
-              -keystore ~/.android/debug.keystore \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
+          keytool -genkey -v \
+            -keystore release.keystore \
+            -storepass metrolist \
+            -alias metrolist \
+            -keypass metrolist \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Metrolist,O=Metrolist,C=US"
 
-      - name: Build Universal FOSS Debug APK
-        run: ./gradlew --console=plain assembleUniversalFossDebug --warning-mode summary -x lint -x lintUniversalFossDebug
+      - name: Build Universal FOSS Release APK
+        run: ./gradlew --console=plain assembleUniversalFossRelease --warning-mode summary -x lint -x lintUniversalFossRelease
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           PULL_REQUEST: "false"
 
+      - name: Sign APK
+        run: |
+          BUILD_TOOLS=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
+          UNSIGNED=$(find app/build/outputs/apk/universalFoss/release/ -name "*.apk" | head -1)
+          $BUILD_TOOLS/zipalign -v 4 "$UNSIGNED" app-aligned.apk
+          $BUILD_TOOLS/apksigner sign \
+            --ks release.keystore \
+            --ks-pass pass:metrolist \
+            --ks-key-alias metrolist \
+            --key-pass pass:metrolist \
+            --out Metrolist-v13.2.1-lt-fix.apk \
+            app-aligned.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v6
         with:
-          name: Metrolist-v13.2.1-lt-fix-debug
-          path: app/build/outputs/apk/universalFoss/debug/*.apk
+          name: Metrolist-v13.2.1-lt-fix
+          path: Metrolist-v13.2.1-lt-fix.apk
