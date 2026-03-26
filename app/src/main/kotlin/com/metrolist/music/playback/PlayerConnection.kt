@@ -214,6 +214,11 @@ class PlayerConnection(
     }
 
     fun playQueue(queue: Queue) {
+        // Block if Listen Together guest (unless internal sync)
+        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
+            Timber.tag("PlayerConnection").d("playQueue blocked - Listen Together guest")
+            return
+        }
         if (!playerReadinessFlow.value) {
             Timber.tag(TAG).w("playQueue called before player ready; delegating to service")
         }
@@ -302,6 +307,7 @@ class PlayerConnection(
      * Toggle play/pause - handles Cast when active
      */
     fun togglePlayPause() {
+        if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) return
         try {
             val castHandler = service.castConnectionHandler
             if (castHandler?.isCasting?.value == true) {
