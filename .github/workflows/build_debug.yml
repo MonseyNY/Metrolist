@@ -29,8 +29,15 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Generate signing keystore
+      - name: Build Universal FOSS Release APK
+        run: ./gradlew --console=plain assembleUniversalFossRelease --warning-mode summary -x lint -x lintUniversalFossRelease
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          PULL_REQUEST: "false"
+
+      - name: Generate keystore and sign APK
         run: |
+          # Generate a keystore
           keytool -genkey -v \
             -keystore release.keystore \
             -storepass metrolist \
@@ -41,25 +48,30 @@ jobs:
             -validity 10000 \
             -dname "CN=Metrolist,O=Metrolist,C=US"
 
-      - name: Build Universal FOSS Release APK
-        run: ./gradlew --console=plain assembleUniversalFossRelease --warning-mode summary -x lint -x lintUniversalFossRelease
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          PULL_REQUEST: "false"
-
-      - name: Sign APK
-        run: |
+          # Find the unsigned APK
           UNSIGNED=$(find app/build/outputs/apk/universalFoss/release/ -name "*.apk" | head -1)
-          echo "Found APK: $UNSIGNED"
-          # Sign with jarsigner
-          cp "$UNSIGNED" Metrolist-v13.2.1-lt-fix.apk
-          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
-            -keystore release.keystore \
-            -storepass metrolist \
-            -keypass metrolist \
-            Metrolist-v13.2.1-lt-fix.apk metrolist
+          echo "Found unsigned APK: $UNSIGNED"
+          ls -la "$UNSIGNED"
+
+          # Find build-tools
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/*/ | sort -V | tail -1)
+          echo "Using build-tools: $BUILD_TOOLS_DIR"
+
+          # Zipalign
+          ${BUILD_TOOLS_DIR}zipalign -v -p 4 "$UNSIGNED" aligned.apk
+
+          # Sign with apksigner
+          ${BUILD_TOOLS_DIR}apksigner sign \
+            --ks release.keystore \
+            --ks-pass pass:metrolist \
+            --ks-key-alias metrolist \
+            --key-pass pass:metrolist \
+            --out Metrolist-v13.2.1-lt-fix.apk \
+            aligned.apk
+
           # Verify
-          jarsigner -verify Metrolist-v13.2.1-lt-fix.apk
+          ${BUILD_TOOLS_DIR}apksigner verify --verbose Metrolist-v13.2.1-lt-fix.apk
+          ls -la Metrolist-v13.2.1-lt-fix.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
