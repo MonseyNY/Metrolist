@@ -49,16 +49,17 @@ jobs:
 
       - name: Sign APK
         run: |
-          BUILD_TOOLS=$ANDROID_HOME/build-tools/$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
           UNSIGNED=$(find app/build/outputs/apk/universalFoss/release/ -name "*.apk" | head -1)
-          $BUILD_TOOLS/zipalign -v 4 "$UNSIGNED" app-aligned.apk
-          $BUILD_TOOLS/apksigner sign \
-            --ks release.keystore \
-            --ks-pass pass:metrolist \
-            --ks-key-alias metrolist \
-            --key-pass pass:metrolist \
-            --out Metrolist-v13.2.1-lt-fix.apk \
-            app-aligned.apk
+          echo "Found APK: $UNSIGNED"
+          # Sign with jarsigner
+          cp "$UNSIGNED" Metrolist-v13.2.1-lt-fix.apk
+          jarsigner -verbose -sigalg SHA256withRSA -digestalg SHA-256 \
+            -keystore release.keystore \
+            -storepass metrolist \
+            -keypass metrolist \
+            Metrolist-v13.2.1-lt-fix.apk metrolist
+          # Verify
+          jarsigner -verify Metrolist-v13.2.1-lt-fix.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v6
